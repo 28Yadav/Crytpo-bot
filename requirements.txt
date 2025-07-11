@@ -1,0 +1,4 @@
+ccxt
+unicorn
+pandas
+numpy
