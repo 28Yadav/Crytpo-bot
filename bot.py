@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import requests
+from api import API_SECRET, API_KEY
 import hmac
 from hashlib import sha256
 import uuid
@@ -13,36 +14,33 @@ import uuid
 
 SYMBOLS = ['ETH-USDT']
 TIMEFRAME = '15m'
-TRADE_QTY = 0.017  # Fixed manual quantity, e.g., 0.01 ETH
+TRADE_QTY = 0.01  # Fixed manual quantity, e.g., 0.01 ETH
 SL_AMOUNT = 0.80  # Stop loss in USDT
 TP_AMOUNT = 0.50  # Take profit in USDT
 
 APIURL = "https://open-api.bingx.com"
 HEADERS = {
-    'X-BX-APIKEY': 'TqS2UwImeJdxlVJw2t255c4rpcjcey2RxyTFUeI1xklzvt76gIq6YGV6UxsuElxE08C39i293hSEEUgr4Mgqg'
+    'X-BX-APIKEY': API_KEY
 }
 
 # ================== SIGNED REQUEST UTILS ===============
 def get_timestamp():
     return str(int(time.time() * 1000))
 
-def parse_param(params):
-    keys = sorted(params)
-    param_str = '&'.join(f"{key}={params[key]}" for key in keys)
-    if param_str:
-        return param_str + f"&timestamp={get_timestamp()}"
-    else:
-        return f"timestamp={get_timestamp()}"
+def get_sign(secret, param_str):
+    return hmac.new(secret.encode(), param_str.encode(), sha256).hexdigest()
 
-def get_sign(secret, payload):
-    return hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), digestmod=sha256).hexdigest()
+def parse_param(params: dict):
+    return '&'.join(f"{k}={params[k]}" for k in sorted(params))
 
 def send_signed_request(method, path, base_params=None):
     if base_params is None:
         base_params = {}
+    base_params["timestamp"] = get_timestamp()
     base_params["recvWindow"] = "60000"
     param_str = parse_param(base_params)
-    full_url = f"{APIURL}{path}?{param_str}&signature={get_sign('TqS2UwImeJdxlVJw2t255c4rpcjcey2RxyTFUeI1xklzvt76gIq6YGV6UxsuElxE08C39i293hSEEUgr4Mgqg', param_str)}"
+    signature = get_sign(API_SECRET, param_str)
+    full_url = f"{APIURL}{path}?{param_str}&signature={signature}"
     response = requests.request(method, full_url, headers=HEADERS)
     j = response.json()
     if response.status_code != 200 or j.get("code") != 0:
@@ -110,7 +108,7 @@ def place_order(symbol, side, qty, entry_price):
         'symbol': symbol,
         'side': 'SELL' if side == 'buy' else 'BUY',
         'type': 'TAKE_PROFIT_MARKET',
-        'stopPrice': tp_price,
+        'stopPrice': round(tp_price, 2),
         'closePosition': True,
         'clientOrderID': generate_client_order_id(),
         'workingType': 'MARK_PRICE'
@@ -120,7 +118,7 @@ def place_order(symbol, side, qty, entry_price):
         'symbol': symbol,
         'side': 'SELL' if side == 'buy' else 'BUY',
         'type': 'STOP_MARKET',
-        'stopPrice': sl_price,
+        'stopPrice': round(sl_price, 2),
         'closePosition': True,
         'clientOrderID': generate_client_order_id(),
         'workingType': 'MARK_PRICE'
