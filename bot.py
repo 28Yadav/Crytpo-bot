@@ -11,15 +11,15 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['ETH/USDT']
+SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.01')
-TP_PERCENT = Decimal('0.15')  # 15%
-SL_PERCENT = Decimal('0.20')  # 20%
+ORDER_SIZE_ETH = Decimal('0.02')
+TP_PERCENT = Decimal('0.01')  # 15%
+SL_PERCENT = Decimal('0.02')  # 20%
 
 exchange = ccxt.bingx({
-    'apiKey': '',
-    'secret': '',
+    'apiKey': "TqS2UwImeJdxlVJw2t255c4rpcjcey2RxyTFUeI1xklzvt76gIq6YGV6UxsuElxE08C39i293hSEEUgr4Mgqg",
+    'secret': "hJmuhVSclYzL8UGcuBzw3NrVjF18WZlYt1Zm6SdZa1n0a3nq2POCYoDhKGnIGmmF5Kt8O1XIk6fIpOigJd8Q",
     'enableRateLimit': True,
     'options': {
         'defaultType': 'swap',
@@ -114,7 +114,6 @@ def place_order(symbol, side, entry_price):
 
 
 
-
 def in_position(symbol):
     positions = exchange.fetch_positions([symbol])
     for pos in positions:
@@ -151,11 +150,11 @@ def trade_logic(symbol):
     print(f"📊 Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
     print(get_balance())
 
-    if price > vwap:
+    if ema9 > ema21 and price > vwap:
         place_order(symbol, 'buy', price)
         print(f"✅ LONG {symbol}")
 
-    elif price < vwap:
+    elif ema9 < ema21 and price < vwap:
         place_order(symbol, 'sell', price)
         print(f"✅ SHORT {symbol}")
     else:
@@ -171,6 +170,5 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
         time.sleep(60)
-
 
 
