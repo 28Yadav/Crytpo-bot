@@ -1,137 +1,123 @@
-# File: bingx_http_trading_bot.py
-
 import time
 import pandas as pd
 import numpy as np
 import datetime
-import requests
-from api import API_SECRET, API_KEY
-import hmac
-from hashlib import sha256
+import ccxt
 import uuid
+from decimal import Decimal, getcontext
+
+
+getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['ETH-USDT']
+SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-TRADE_QTY = 0.01  # Fixed manual quantity, e.g., 0.01 ETH
-SL_AMOUNT = 0.80  # Stop loss in USDT
-TP_AMOUNT = 0.50  # Take profit in USDT
+ORDER_SIZE_ETH = Decimal('0.017')
+TP_PERCENT = Decimal('0.02')  # 15%
+SL_PERCENT = Decimal('0.04')  # 20%
 
-APIURL = "https://open-api.bingx.com"
-HEADERS = {
-    'X-BX-APIKEY': API_KEY
-}
-
-# ================== SIGNED REQUEST UTILS ===============
-def get_timestamp():
-    return str(int(time.time() * 1000))
-
-def get_sign(secret, param_str):
-    return hmac.new(secret.encode(), param_str.encode(), sha256).hexdigest()
-
-def parse_param(params: dict):
-    return '&'.join(f"{k}={params[k]}" for k in sorted(params))
-
-def send_signed_request(method, path, base_params=None):
-    if base_params is None:
-        base_params = {}
-    base_params["timestamp"] = get_timestamp()
-    base_params["recvWindow"] = "60000"
-    param_str = parse_param(base_params)
-    signature = get_sign(API_SECRET, param_str)
-    full_url = f"{APIURL}{path}?{param_str}&signature={signature}"
-    response = requests.request(method, full_url, headers=HEADERS)
-    j = response.json()
-    if response.status_code != 200 or j.get("code") != 0:
-        raise ValueError(f"API Error: {j}")
-    return j
+exchange = ccxt.bingx({
+    'apiKey': "TqS2UwImeJdxlVJw2t255c4rpcjcey2RxyTFUeI1xklzvt76gIq6YGV6UxsuElxE08C39i293hSEEUgr4Mgqg",
+    'secret': "hJmuhVSclYzL8UGcuBzw3NrVjF18WZlYt1Zm6SdZa1n0a3nq2POCYoDhKGnIGmmF5Kt8O1XIk6fIpOigJd8Q",
+    'enableRateLimit': True,
+    'options': {
+        'defaultType': 'swap',
+    }
+})
 
 # ================== DATA FETCH ================
-def fetch_ohlcv(symbol, interval, limit=150):
+def fetch_ohlcv(symbol, timeframe, limit=150):
     print(f"📈 Fetching OHLCV for {symbol}...")
-    r = requests.get(f"{APIURL}/openApi/swap/v2/quote/klines", params={
-        "symbol": symbol,
-        "interval": interval,
-        "limit": limit
-    })
-    j = r.json()
-    if r.status_code != 200 or j.get("code") != 0 or 'data' not in j:
-        raise ValueError(f"OHLCV fetch error: {j}")
-    data = j['data']
-    if isinstance(data, dict):
-        raise ValueError(f"Unexpected OHLCV data format: {data}")
-    df = pd.DataFrame(data)
-    if df.shape[1] != 6:
-        raise ValueError("Unexpected number of columns in OHLCV response")
-    df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-    df['timestamp'] = pd.to_datetime(pd.to_numeric(df['timestamp'], errors='coerce'), unit='ms')
-    for col in ['open', 'high', 'low', 'close', 'volume']:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
     return df
 
-# ================== REST API ==================
+# ================== BALANCE ===================
 def get_balance():
-    j = send_signed_request('GET', '/openApi/swap/v2/user/balance')
-    data = j.get('data', [])
-    if isinstance(data, list):
-        for asset in data:
-            if asset.get('asset') == 'USDT':
-                return float(asset.get('availableBalance', 0))
-        raise ValueError("USDT balance not found in balance list")
-    elif isinstance(data, dict):
-        print(f"[DEBUG] Balance response dict: {data}")
-        return float(data.get('availableBalance', 0))
-    else:
-        raise ValueError("Unexpected balance data structure")
+    balance = exchange.fetch_balance({'type': 'swap'})
+    usdt = balance.get('free', {}).get('USDT', 0)
+    print(f"[DEBUG] USDT Free Balance: {usdt}")
+    return Decimal(str(usdt))
 
 def generate_client_order_id():
     return "ccbot-" + uuid.uuid4().hex[:16]
 
-def place_order(symbol, side, qty, entry_price):
-    position_side = 'LONG' if side.lower() == 'buy' else 'SHORT'
-    print(f"🛒 Placing {side.upper()} order on {symbol} for qty: {qty}...")
+# ================== ORDER EXECUTION ===================
+def place_order(symbol, side, entry_price):
+    print(f"🛒 Placing {side.upper()} order on {symbol}...")
 
-    order = send_signed_request('POST', '/openApi/swap/v2/trade/order', {
-        'symbol': symbol,
-        'side': side.upper(),
-        'type': 'MARKET',
-        'positionSide': position_side,
-        'quantity': qty,
-        'clientOrderID': generate_client_order_id()
-    })
+    try:
+        entry_price = float(entry_price)
+        qty = float(ORDER_SIZE_ETH)
+    except Exception as e:
+        print(f"[Qty Error] {e}")
+        return
 
-    sl_price = entry_price - SL_AMOUNT if side == 'buy' else entry_price + SL_AMOUNT
-    tp_price = entry_price + TP_AMOUNT if side == 'buy' else entry_price - TP_AMOUNT
+    print(f"[DEBUG] Qty: {qty}")
 
-    send_signed_request('POST', '/openApi/swap/v2/trade/order', {
-        'symbol': symbol,
-        'side': 'SELL' if side == 'buy' else 'BUY',
-        'type': 'TAKE_PROFIT_MARKET',
-        'stopPrice': round(tp_price, 2),
-        'closePosition': True,
-        'clientOrderID': generate_client_order_id(),
-        'workingType': 'MARK_PRICE'
-    })
+    try:
+        exchange.set_position_mode(True)
+        print(f"[DEBUG] Position Mode: Hedge")
+    except Exception as e:
+        print(f"[Mode Error] {e}")
+        return
 
-    send_signed_request('POST', '/openApi/swap/v2/trade/order', {
-        'symbol': symbol,
-        'side': 'SELL' if side == 'buy' else 'BUY',
-        'type': 'STOP_MARKET',
-        'stopPrice': round(sl_price, 2),
-        'closePosition': True,
-        'clientOrderID': generate_client_order_id(),
-        'workingType': 'MARK_PRICE'
-    })
+    try:
+        leverage_side = 'LONG' if side == 'buy' else 'SHORT'
+        exchange.set_leverage(15, symbol, params={'side': leverage_side})
+        print(f"[DEBUG] Leverage set to 15x {leverage_side} for {symbol}")
+    except Exception as e:
+        print(f"[Leverage Error] {e}")
+        return
+
+    order_params = {
+        'marginMode': 'isolated',
+        'positionSide': leverage_side,
+        'type': 'swap',
+        'clientOrderId': generate_client_order_id()
+    }
+    print(f"[DEBUG] Order Params: {order_params}")
+
+    try:
+        order = exchange.create_order(symbol, 'market', side, qty, None, order_params)
+        print(f"[ORDER SUCCESS] Order placed with qty {qty}")
+    except ccxt.InsufficientFunds as e:
+        print(f"[FAILURE] Order rejected due to insufficient funds: {str(e)}")
+        return
+
+    sl_price = round(entry_price * (1 - float(SL_PERCENT)) if side == 'buy' else entry_price * (1 + float(SL_PERCENT)), 2)
+    tp_price = round(entry_price * (1 + float(TP_PERCENT)) if side == 'buy' else entry_price * (1 - float(TP_PERCENT)), 2)
+
+    print(f"[DEBUG] SL: {sl_price}, TP: {tp_price}, Entry: {entry_price}, Side: {side}")
+
+    try:
+        exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
+            'stopPrice': sl_price,
+            'marginMode': 'isolated',
+            'positionSide': leverage_side
+        })
+    except Exception as e:
+        print(f"[SL Error] {e}")
+
+    try:
+        exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
+            'stopPrice': tp_price,
+            'marginMode': 'isolated',
+            'positionSide': leverage_side
+        })
+    except Exception as e:
+        print(f"[TP Error] {e}")
 
     return order
 
+
+
 def in_position(symbol):
-    j = send_signed_request('GET', '/openApi/swap/v2/user/positions', {"symbol": symbol})
-    if not j['data']:
-        return False
-    for p in j['data']:
-        if float(p.get('positionAmt', 0)) != 0:
+    positions = exchange.fetch_positions([symbol])
+    for pos in positions:
+        if float(pos.get('contracts', 0)) != 0:
             return True
     return False
 
@@ -152,22 +138,24 @@ def trade_logic(symbol):
 
     df = fetch_ohlcv(symbol, TIMEFRAME)
     df['vwap'] = compute_vwap(df)
-    df['ema_20'] = compute_ema(df['close'], 20)
+    df['ema_9'] = compute_ema(df['close'], 9)
+    df['ema_21'] = compute_ema(df['close'], 21)
 
     last = df.iloc[-1]
     price = last['close']
     vwap = last['vwap']
-    ema = last['ema_20']
+    ema9 = last['ema_9']
+    ema21 = last['ema_21']
 
-    print(f"📊 Price: {price}, VWAP: {vwap:.2f}, EMA20: {ema:.2f}")
+    print(f"📊 Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
     print(get_balance())
 
-    if price > vwap and price > ema:
-        place_order(symbol, 'buy', TRADE_QTY, price)
+    if ema9 > ema21 and price > vwap:
+        place_order(symbol, 'buy', price)
         print(f"✅ LONG {symbol}")
 
-    elif price < vwap and price < ema:
-        place_order(symbol, 'sell', TRADE_QTY, price)
+    elif ema9 < ema21 and price < vwap:
+        place_order(symbol, 'sell', price)
         print(f"✅ SHORT {symbol}")
     else:
         print(f"⏸️ No trade condition met for {symbol}")
@@ -182,3 +170,5 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
         time.sleep(60)
+
+
