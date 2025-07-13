@@ -133,8 +133,8 @@ def compute_vwap(df):
 def trade_logic(symbol):
     print(f"🔍 Analyzing {symbol}...")
     if in_position(symbol):
-        print(f"⛔ Already in position for {symbol}")
-        return
+        print(f"⛔️ Already in position for {symbol}")
+        return False
 
     df = fetch_ohlcv(symbol, TIMEFRAME)
     df['vwap'] = compute_vwap(df)
@@ -153,22 +153,33 @@ def trade_logic(symbol):
     if ema9 > ema21 and price > vwap:
         place_order(symbol, 'buy', price)
         print(f"✅ LONG {symbol}")
+        return True
 
     elif ema9 < ema21 and price < vwap:
         place_order(symbol, 'sell', price)
         print(f"✅ SHORT {symbol}")
+        return True
+
     else:
         print(f"⏸️ No trade condition met for {symbol}")
+        return False
 
 # ================== MAIN =====================
 if __name__ == '__main__':
     print("🚀 Trading bot started...")
     while True:
+        trade_made = False
+
         for symbol in SYMBOLS:
             try:
-                trade_logic(symbol)
+                if trade_logic(symbol):
+                    trade_made = True
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
-        time.sleep(60)
 
-
+        if trade_made:
+            print("⏰ Sleeping for 2 hours after trade...")
+            time.sleep(7200)
+        else:
+            print("⏰ No trade, sleeping 60 seconds...")
+            time.sleep(60)
