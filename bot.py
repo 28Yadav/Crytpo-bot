@@ -13,8 +13,8 @@ getcontext().prec = 18
 
 SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.02')
-TP_PERCENT = Decimal('0.01')  # 15%
+ORDER_SIZE_ETH = Decimal('0.0225')
+TP_PERCENT = Decimal('0.0092')  # 15%
 SL_PERCENT = Decimal('0.02')  # 20%
 
 exchange = ccxt.bingx({
