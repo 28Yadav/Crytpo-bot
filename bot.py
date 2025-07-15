@@ -10,10 +10,10 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['BTC/USDT:USDT']
+SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.00025')
-TP_PERCENT = Decimal('0.004')
+ORDER_SIZE_ETH = Decimal('0.02')
+TP_PERCENT = Decimal('0.01')
 SL_PERCENT = Decimal('0.02')
 
 exchange = ccxt.bingx({
@@ -30,7 +30,7 @@ cooldown_period = 3600  # seconds
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"\U0001f4c8 Fetching OHLCV for {symbol}...")
+    print(f"📈 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -48,7 +48,7 @@ def generate_client_order_id():
 
 # ================== ORDER EXECUTION ===================
 def place_order(symbol, side, entry_price):
-    print(f"\U0001f6d2 Placing {side.upper()} order on {symbol}...")
+    print(f"🛒 Placing {side.upper()} order on {symbol}...")
 
     try:
         entry_price = float(entry_price)
@@ -89,37 +89,27 @@ def place_order(symbol, side, entry_price):
         print(f"[FAILURE] Order rejected due to insufficient funds: {str(e)}")
         return
 
-    sl_price = round(entry_price * (1 - float(SL_PERCENT)) if side == 'buy' else entry_price * (1 + float(SL_PERCENT)), 2)
-    tp_price = round(entry_price * (1 + float(TP_PERCENT)) if side == 'buy' else entry_price * (1 - float(TP_PERCENT)), 2)
-
-    print(f"[DEBUG] SL: {sl_price}, TP: {tp_price}, Entry: {entry_price}, Side: {side}")
-
-    try:
-        exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
-            'stopPrice': sl_price,
-            'marginMode': 'isolated',
-            'positionSide': leverage_side
-        })
-    except Exception as e:
-        print(f"[SL Error] {e}")
-
-    try:
-        exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
-            'stopPrice': tp_price,
-            'marginMode': 'isolated',
-            'positionSide': leverage_side
-        })
-    except Exception as e:
-        print(f"[TP Error] {e}")
-
     return order
+
+def close_position(symbol, side):
+    try:
+        qty = float(ORDER_SIZE_ETH)
+        opposite_side = 'sell' if side == 'buy' else 'buy'
+        position_side = 'LONG' if side == 'buy' else 'SHORT'
+        exchange.create_order(symbol, 'market', opposite_side, qty, None, {
+            'positionSide': position_side,
+            'marginMode': 'isolated'
+        })
+        print(f"🔁 Closed {position_side} due to signal flip")
+    except Exception as e:
+        print(f"[Close Position Error] {e}")
 
 def in_position(symbol):
     positions = exchange.fetch_positions([symbol])
     for pos in positions:
         if float(pos.get('contracts', 0)) != 0:
-            return True
-    return False
+            return pos
+    return None
 
 # ================== STRATEGY ==================
 def compute_ema(series, period):
@@ -132,15 +122,11 @@ def compute_vwap(df):
 
 def trade_logic(symbol):
     global last_trade_time
-    print(f"\U0001f50d Analyzing {symbol}...")
+    print(f"🔍 Analyzing {symbol}...")
 
     now = time.time()
     if symbol in last_trade_time and now - last_trade_time[symbol] < cooldown_period:
-        print(f"⏲️ Cooldown active for {symbol}")
-        return False
-
-    if in_position(symbol):
-        print(f"⛔️ Already in position for {symbol}")
+        print(f"⏳ Cooldown active for {symbol}")
         return False
 
     df = fetch_ohlcv(symbol, TIMEFRAME)
@@ -155,41 +141,52 @@ def trade_logic(symbol):
     ema9 = last['ema_9']
     ema21 = last['ema_21']
 
-    print(f"\U0001f4ca Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
+    avg_vol = df['volume'].rolling(20).mean().iloc[-1]
+    if last['volume'] < avg_vol:
+        print("⚠️ Volume too low — skipping entry.")
+        return False
+
+    if abs(ema9 - ema21) / price < 0.002:
+        print("⛔ EMA too close — flat market, skipping.")
+        return False
+
+    print(f"📊 Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
     print(get_balance())
 
+    current_position = in_position(symbol)
+    signal = None
+
     if (prev['ema_9'] <= prev['ema_21']) and (ema9 > ema21) and price > vwap:
-        place_order(symbol, 'buy', price)
-        last_trade_time[symbol] = now
-        print(f"✅ LONG {symbol}")
-        return True
-
+        signal = 'buy'
     elif (prev['ema_9'] >= prev['ema_21']) and (ema9 < ema21) and price < vwap:
-        place_order(symbol, 'sell', price)
+        signal = 'sell'
+
+    if current_position:
+        pos_side = current_position['side'].lower()
+        if signal and signal != pos_side:
+            close_position(symbol, pos_side)
+            last_trade_time[symbol] = now
+            return True
+        else:
+            print(f"🧭 Holding current {pos_side} position")
+            return False
+
+    if signal:
+        place_order(symbol, signal, price)
         last_trade_time[symbol] = now
-        print(f"✅ SHORT {symbol}")
+        print(f"✅ {signal.upper()} {symbol}")
         return True
 
-    else:
-        print(f"⏸️ No trade condition met for {symbol}")
-        return False
+    print(f"⏸️ No trade condition met for {symbol}")
+    return False
 
 # ================== MAIN =====================
 if __name__ == '__main__':
     print("🚀 Trading bot started...")
     while True:
-        trade_made = False
-
         for symbol in SYMBOLS:
             try:
-                if trade_logic(symbol):
-                    trade_made = True
+                trade_logic(symbol)
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
-
-        if trade_made:
-            print("⏰ Sleeping for 2 hours after trade...")
-            time.sleep(7200)
-        else:
-            print("⏰ No trade, sleeping 60 seconds...")
-            time.sleep(60)
+        time.sleep(60)
