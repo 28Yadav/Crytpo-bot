@@ -13,7 +13,7 @@ getcontext().prec = 18
 SYMBOLS = ['BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_ETH = Decimal('0.00025')
-TP_PERCENT = Decimal('0.008')
+TP_PERCENT = Decimal('0.004')
 SL_PERCENT = Decimal('0.02')
 
 exchange = ccxt.bingx({
