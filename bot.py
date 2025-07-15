@@ -10,10 +10,10 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['ETH/USDT:USDT']
+SYMBOLS = ['BTC/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.02')
-TP_PERCENT = Decimal('0.01')
+ORDER_SIZE_ETH = Decimal('0.00033')
+TP_PERCENT = Decimal('0.007')
 SL_PERCENT = Decimal('0.02')
 
 exchange = ccxt.bingx({
