@@ -12,7 +12,7 @@ getcontext().prec = 18
 
 SYMBOLS = ['BTC/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.025')
+ORDER_SIZE_ETH = Decimal('0.00025')
 TP_PERCENT = Decimal('0.008')
 SL_PERCENT = Decimal('0.02')
 
@@ -68,7 +68,7 @@ def place_order(symbol, side, entry_price):
 
     try:
         leverage_side = 'LONG' if side == 'buy' else 'SHORT'
-        exchange.set_leverage(18, symbol, params={'side': leverage_side})
+        exchange.set_leverage(15, symbol, params={'side': leverage_side})
         print(f"[DEBUG] Leverage set to 15x {leverage_side} for {symbol}")
     except Exception as e:
         print(f"[Leverage Error] {e}")
