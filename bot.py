@@ -10,7 +10,7 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['ETH/USDT:USDT']
+SYMBOLS = ['BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_ETH = Decimal('0.025')
 TP_PERCENT = Decimal('0.008')
