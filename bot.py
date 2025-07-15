@@ -12,7 +12,7 @@ getcontext().prec = 18
 
 SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.02')
+ORDER_SIZE_ETH = Decimal('0.018')
 TP_PERCENT = Decimal('0.01')
 SL_PERCENT = Decimal('0.02')
 
