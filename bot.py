@@ -27,10 +27,11 @@ exchange = ccxt.bingx({
 
 last_trade_time = {}
 cooldown_period = 3600  # seconds
+open_trade = {}
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"\U0001f4c8 Fetching OHLCV for {symbol}...")
+    print(f"📈 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -47,8 +48,21 @@ def generate_client_order_id():
     return "ccbot-" + uuid.uuid4().hex[:16]
 
 # ================== ORDER EXECUTION ===================
+def close_position(symbol, side):
+    try:
+        qty = float(ORDER_SIZE_ETH)
+        close_side = 'sell' if side == 'buy' else 'buy'
+        exchange.create_order(symbol, 'market', close_side, qty, None, {
+            'marginMode': 'isolated',
+            'positionSide': 'LONG' if side == 'buy' else 'SHORT',
+            'reduceOnly': True
+        })
+        print(f"[CLOSE] Closed {side} position on {symbol}")
+    except Exception as e:
+        print(f"[Close Error] {e}")
+
 def place_order(symbol, side, entry_price):
-    print(f"\U0001f6d2 Placing {side.upper()} order on {symbol}...")
+    print(f"🚒 Placing {side.upper()} order on {symbol}...")
 
     try:
         entry_price = float(entry_price)
@@ -112,14 +126,15 @@ def place_order(symbol, side, entry_price):
     except Exception as e:
         print(f"[TP Error] {e}")
 
+    open_trade[symbol] = side
     return order
 
 def in_position(symbol):
     positions = exchange.fetch_positions([symbol])
     for pos in positions:
         if float(pos.get('contracts', 0)) != 0:
-            return True
-    return False
+            return pos['side']
+    return None
 
 # ================== STRATEGY ==================
 def compute_ema(series, period):
@@ -130,49 +145,62 @@ def compute_vwap(df):
     vwap = (tp * df['volume']).cumsum() / df['volume'].cumsum()
     return vwap
 
+def is_flat_ema(df, period=9, threshold=0.002):
+    ema = compute_ema(df['close'], period)
+    diff = ema.diff().abs()
+    avg_slope = diff.tail(10).mean() / df['close'].iloc[-1]
+    return avg_slope < threshold
+
 def trade_logic(symbol):
     global last_trade_time
-    print(f"\U0001f50d Analyzing {symbol}...")
+    print(f"🔍 Analyzing {symbol}...")
 
     now = time.time()
-    if symbol in last_trade_time and now - last_trade_time[symbol] < cooldown_period:
-        print(f"⏲️ Cooldown active for {symbol}")
-        return False
-
-    if in_position(symbol):
-        print(f"⛔️ Already in position for {symbol}")
-        return False
-
     df = fetch_ohlcv(symbol, TIMEFRAME)
     df['vwap'] = compute_vwap(df)
     df['ema_9'] = compute_ema(df['close'], 9)
     df['ema_21'] = compute_ema(df['close'], 21)
 
+    if is_flat_ema(df):
+        print(f"[SKIP] Flat EMA detected for {symbol}")
+        return False
+
     last = df.iloc[-1]
     prev = df.iloc[-2]
+
     price = last['close']
     vwap = last['vwap']
     ema9 = last['ema_9']
     ema21 = last['ema_21']
 
-    print(f"\U0001f4ca Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
-    print(get_balance())
-
+    side_signal = None
     if (prev['ema_9'] <= prev['ema_21']) and (ema9 > ema21) and price > vwap:
-        place_order(symbol, 'buy', price)
-        last_trade_time[symbol] = now
-        print(f"✅ LONG {symbol}")
-        return True
-
+        side_signal = 'buy'
     elif (prev['ema_9'] >= prev['ema_21']) and (ema9 < ema21) and price < vwap:
-        place_order(symbol, 'sell', price)
-        last_trade_time[symbol] = now
-        print(f"✅ SHORT {symbol}")
-        return True
+        side_signal = 'sell'
 
-    else:
-        print(f"⏸️ No trade condition met for {symbol}")
+    pos = in_position(symbol)
+
+    if pos:
+        if open_trade.get(symbol) and open_trade[symbol] != side_signal and side_signal:
+            print(f"[REVERSE] Closing {open_trade[symbol]} due to {side_signal} signal")
+            close_position(symbol, open_trade[symbol])
+            open_trade.pop(symbol, None)
         return False
+
+    if not side_signal:
+        print(f"[HOLD] No signal for {symbol}")
+        return False
+
+    if symbol in last_trade_time and now - last_trade_time[symbol] < cooldown_period:
+        print(f"[WAIT] Cooldown for {symbol}")
+        return False
+
+    order = place_order(symbol, side_signal, price)
+    if order:
+        last_trade_time[symbol] = now
+        return True
+    return False
 
 # ================== MAIN =====================
 if __name__ == '__main__':
@@ -193,4 +221,3 @@ if __name__ == '__main__':
         else:
             print("⏰ No trade, sleeping 60 seconds...")
             time.sleep(60)
-
