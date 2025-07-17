@@ -1,4 +1,3 @@
-# trading_bot.py
 import time
 import pandas as pd
 import numpy as np
@@ -11,12 +10,12 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['BTC/USDT:USDT']
+SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.00084')
+ORDER_SIZE_ETH = Decimal('0.02')
 TP_PERCENT = Decimal('0.01')
 SL_PERCENT = Decimal('0.02')
-COOLDOWN_PERIOD = 7200  # 2 hours in seconds
+COOLDOWN_PERIOD = 60 * 60 * 4  # 4 hours
 
 exchange = ccxt.bingx({
     'apiKey': "wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg",
@@ -27,7 +26,7 @@ exchange = ccxt.bingx({
     }
 })
 
-last_tp_time = None
+last_trade_time = {}
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
@@ -49,9 +48,7 @@ def generate_client_order_id():
 
 # ================== ORDER EXECUTION ===================
 def place_order(symbol, side, entry_price):
-    global last_tp_time
-
-    print(f"\U0001F6D2 Placing {side.upper()} order on {symbol}...")
+    print(f"🛒 Placing {side.upper()} order on {symbol}...")
     try:
         entry_price = float(entry_price)
         qty = float(ORDER_SIZE_ETH)
@@ -63,7 +60,6 @@ def place_order(symbol, side, entry_price):
 
     try:
         exchange.set_position_mode(True)
-        print(f"[DEBUG] Position Mode: Hedge")
     except Exception as e:
         print(f"[Mode Error] {e}")
         return
@@ -71,7 +67,6 @@ def place_order(symbol, side, entry_price):
     try:
         leverage_side = 'LONG' if side == 'buy' else 'SHORT'
         exchange.set_leverage(15, symbol, params={'side': leverage_side})
-        print(f"[DEBUG] Leverage set to 15x {leverage_side} for {symbol}")
     except Exception as e:
         print(f"[Leverage Error] {e}")
         return
@@ -82,19 +77,15 @@ def place_order(symbol, side, entry_price):
         'type': 'swap',
         'clientOrderId': generate_client_order_id()
     }
-    print(f"[DEBUG] Order Params: {order_params}")
 
     try:
         order = exchange.create_order(symbol, 'market', side, qty, None, order_params)
-        print(f"[ORDER SUCCESS] Order placed with qty {qty}")
     except ccxt.InsufficientFunds as e:
-        print(f"[FAILURE] Order rejected due to insufficient funds: {str(e)}")
+        print(f"[FAILURE] Order rejected: {str(e)}")
         return
 
     sl_price = round(entry_price * (1 - float(SL_PERCENT)) if side == 'buy' else entry_price * (1 + float(SL_PERCENT)), 2)
     tp_price = round(entry_price * (1 + float(TP_PERCENT)) if side == 'buy' else entry_price * (1 - float(TP_PERCENT)), 2)
-
-    print(f"[DEBUG] SL: {sl_price}, TP: {tp_price}, Entry: {entry_price}, Side: {side}")
 
     try:
         exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
@@ -111,10 +102,10 @@ def place_order(symbol, side, entry_price):
             'marginMode': 'isolated',
             'positionSide': leverage_side
         })
-        last_tp_time = time.time()
     except Exception as e:
         print(f"[TP Error] {e}")
 
+    last_trade_time[symbol] = time.time()
     return order
 
 def in_position(symbol):
@@ -133,59 +124,62 @@ def compute_vwap(df):
     vwap = (tp * df['volume']).cumsum() / df['volume'].cumsum()
     return vwap
 
-def trade_logic(symbol):
-    global last_tp_time
-    print(f"\U0001F50D Analyzing {symbol}...")
-
-    if last_tp_time and (time.time() - last_tp_time < COOLDOWN_PERIOD):
-        print("⏳ Cooldown active. Skipping trade.")
+def is_fresh_signal(df):
+    if len(df) < 2:
         return False
+    prev = df.iloc[-2]
+    last = df.iloc[-1]
+    return (
+        (prev['ema_9'] <= prev['ema_21'] and last['ema_9'] > last['ema_21']) or
+        (prev['ema_9'] >= prev['ema_21'] and last['ema_9'] < last['ema_21'])
+    )
 
+def trade_logic(symbol):
+    print(f"🔍 Analyzing {symbol}...")
     if in_position(symbol):
         print(f"⛔️ Already in position for {symbol}")
         return False
+
+    if symbol in last_trade_time:
+        since_last = time.time() - last_trade_time[symbol]
+        if since_last < COOLDOWN_PERIOD:
+            print(f"⏳ Cooling down ({int((COOLDOWN_PERIOD - since_last) / 60)} min left)...")
+            return False
 
     df = fetch_ohlcv(symbol, TIMEFRAME)
     df['vwap'] = compute_vwap(df)
     df['ema_9'] = compute_ema(df['close'], 9)
     df['ema_21'] = compute_ema(df['close'], 21)
 
-    avg_volume = df['volume'].rolling(window=20).mean()
-    current_volume = df.iloc[-1]['volume']
-    if current_volume < avg_volume.iloc[-1]:
-        print("📉 Volume below average, skipping trade.")
-        return False
-
     last = df.iloc[-1]
-    prev = df.iloc[-2]  # Confirmation candle
     price = last['close']
     vwap = last['vwap']
     ema9 = last['ema_9']
     ema21 = last['ema_21']
 
-    print(f"📊 Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
-    print(get_balance())
+    if not is_fresh_signal(df):
+        print("⚠️ Signal not fresh. Skipping...")
+        return False
 
-    if prev['ema_9'] > prev['ema_21'] and prev['close'] > prev['vwap'] and ema9 > ema21 and price > vwap:
+    if ema9 > ema21 and price > vwap:
         place_order(symbol, 'buy', price)
         print(f"✅ LONG {symbol}")
         return True
 
-    elif prev['ema_9'] < prev['ema_21'] and prev['close'] < prev['vwap'] and ema9 < ema21 and price < vwap:
+    elif ema9 < ema21 and price < vwap:
         place_order(symbol, 'sell', price)
         print(f"✅ SHORT {symbol}")
         return True
 
     else:
-        print(f"⏸️ No trade condition met for {symbol}")
+        print("⏸️ No trade condition met")
         return False
 
 # ================== MAIN =====================
 if __name__ == '__main__':
-    print("\U0001F680 Trading bot started...")
+    print("🚀 Trading bot started...")
     while True:
         trade_made = False
-
         for symbol in SYMBOLS:
             try:
                 if trade_logic(symbol):
@@ -194,8 +188,9 @@ if __name__ == '__main__':
                 print(f"[Unhandled Error] {e}")
 
         if trade_made:
-            print("⏰ Sleeping for 2 hours after trade...")
-            time.sleep(7200)
+            print("⏰ Sleeping for 4 hours after trade...")
+            time.sleep(COOLDOWN_PERIOD)
         else:
             print("⏰ No trade, sleeping 60 seconds...")
             time.sleep(60)
+
