@@ -1,3 +1,4 @@
+# trading_bot.py
 import time
 import pandas as pd
 import numpy as np
@@ -15,6 +16,7 @@ TIMEFRAME = '15m'
 ORDER_SIZE_ETH = Decimal('0.02')
 TP_PERCENT = Decimal('0.01')
 SL_PERCENT = Decimal('0.02')
+COOLDOWN_PERIOD = 7200  # 2 hours in seconds
 
 exchange = ccxt.bingx({
     'apiKey': "TqS2UwImeJdxlVJw2t255c4rpcjcey2RxyTFUeI1xklzvt76gIq6YGV6UxsuElxE08C39i293hSEEUgr4Mgqg",
@@ -25,12 +27,11 @@ exchange = ccxt.bingx({
     }
 })
 
-last_trade_time = {}
-cooldown_period = 3600  # seconds
+last_tp_time = None
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"\U0001f4c8 Fetching OHLCV for {symbol}...")
+    print(f"\U0001F4C8 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -48,8 +49,9 @@ def generate_client_order_id():
 
 # ================== ORDER EXECUTION ===================
 def place_order(symbol, side, entry_price):
-    print(f"\U0001f6d2 Placing {side.upper()} order on {symbol}...")
+    global last_tp_time
 
+    print(f"\U0001F6D2 Placing {side.upper()} order on {symbol}...")
     try:
         entry_price = float(entry_price)
         qty = float(ORDER_SIZE_ETH)
@@ -68,7 +70,7 @@ def place_order(symbol, side, entry_price):
 
     try:
         leverage_side = 'LONG' if side == 'buy' else 'SHORT'
-        exchange.set_leverage(18, symbol, params={'side': leverage_side})
+        exchange.set_leverage(15, symbol, params={'side': leverage_side})
         print(f"[DEBUG] Leverage set to 15x {leverage_side} for {symbol}")
     except Exception as e:
         print(f"[Leverage Error] {e}")
@@ -109,6 +111,7 @@ def place_order(symbol, side, entry_price):
             'marginMode': 'isolated',
             'positionSide': leverage_side
         })
+        last_tp_time = time.time()
     except Exception as e:
         print(f"[TP Error] {e}")
 
@@ -131,12 +134,11 @@ def compute_vwap(df):
     return vwap
 
 def trade_logic(symbol):
-    global last_trade_time
-    print(f"\U0001f50d Analyzing {symbol}...")
+    global last_tp_time
+    print(f"\U0001F50D Analyzing {symbol}...")
 
-    now = time.time()
-    if symbol in last_trade_time and now - last_trade_time[symbol] < cooldown_period:
-        print(f"⏲️ Cooldown active for {symbol}")
+    if last_tp_time and (time.time() - last_tp_time < COOLDOWN_PERIOD):
+        print("⏳ Cooldown active. Skipping trade.")
         return False
 
     if in_position(symbol):
@@ -148,25 +150,29 @@ def trade_logic(symbol):
     df['ema_9'] = compute_ema(df['close'], 9)
     df['ema_21'] = compute_ema(df['close'], 21)
 
+    avg_volume = df['volume'].rolling(window=20).mean()
+    current_volume = df.iloc[-1]['volume']
+    if current_volume < avg_volume.iloc[-1]:
+        print("📉 Volume below average, skipping trade.")
+        return False
+
     last = df.iloc[-1]
-    prev = df.iloc[-2]
+    prev = df.iloc[-2]  # Confirmation candle
     price = last['close']
     vwap = last['vwap']
     ema9 = last['ema_9']
     ema21 = last['ema_21']
 
-    print(f"\U0001f4ca Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
+    print(f"📊 Price: {price}, VWAP: {vwap:.2f}, EMA9: {ema9:.2f}, EMA21: {ema21:.2f}")
     print(get_balance())
 
-    if (prev['ema_9'] <= prev['ema_21']) and (ema9 > ema21) and price > vwap:
+    if prev['ema_9'] > prev['ema_21'] and prev['close'] > prev['vwap'] and ema9 > ema21 and price > vwap:
         place_order(symbol, 'buy', price)
-        last_trade_time[symbol] = now
         print(f"✅ LONG {symbol}")
         return True
 
-    elif (prev['ema_9'] >= prev['ema_21']) and (ema9 < ema21) and price < vwap:
+    elif prev['ema_9'] < prev['ema_21'] and prev['close'] < prev['vwap'] and ema9 < ema21 and price < vwap:
         place_order(symbol, 'sell', price)
-        last_trade_time[symbol] = now
         print(f"✅ SHORT {symbol}")
         return True
 
@@ -176,7 +182,7 @@ def trade_logic(symbol):
 
 # ================== MAIN =====================
 if __name__ == '__main__':
-    print("🚀 Trading bot started...")
+    print("\U0001F680 Trading bot started...")
     while True:
         trade_made = False
 
