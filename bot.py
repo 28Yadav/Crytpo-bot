@@ -1,5 +1,3 @@
-# volume_filtered_trade_bot.py
-
 import time
 import pandas as pd
 import numpy as np
@@ -14,10 +12,10 @@ getcontext().prec = 18
 
 SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.027')
+ORDER_SIZE_ETH = Decimal('0.03')
 TP_PERCENT = Decimal('0.02')
 SL_PERCENT = Decimal('0.03')
-COOLDOWN_PERIOD = 60 * 60 * 2  # 4 hours
+COOLDOWN_PERIOD = 60 * 60 * 2
 
 exchange = ccxt.bingx({
     'apiKey': "wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg",
@@ -25,6 +23,7 @@ exchange = ccxt.bingx({
     'enableRateLimit': True,
     'options': {
         'defaultType': 'swap',
+        'defaultMarginMode': 'cross'
     }
 })
 
@@ -32,7 +31,7 @@ last_trade_time = {}
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"\U0001F4C8 Fetching OHLCV for {symbol}...")
+    print(f"📈 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -73,11 +72,15 @@ def place_order(symbol, side, entry_price):
         print(f"[Leverage Error] {e}")
         return
 
+    try:
+        exchange.set_margin_mode('cross', symbol)
+    except Exception as e:
+        print(f"[Margin Mode Error] {e}")
+
     order_params = {
-        'marginMode': 'cross',
         'positionSide': leverage_side,
-        'type': 'swap',
-        'clientOrderId': generate_client_order_id()
+        'clientOrderId': generate_client_order_id(),
+        'marginMode': 'cross'
     }
 
     try:
@@ -90,7 +93,7 @@ def place_order(symbol, side, entry_price):
     tp_price = round(entry_price * (1 + float(TP_PERCENT)) if side == 'buy' else entry_price * (1 - float(TP_PERCENT)), 2)
 
     try:
-        exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
+        exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, None, {
             'stopPrice': sl_price,
             'marginMode': 'cross',
             'positionSide': leverage_side
@@ -99,7 +102,7 @@ def place_order(symbol, side, entry_price):
         print(f"[SL Error] {e}")
 
     try:
-        exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
+        exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, None, {
             'stopPrice': tp_price,
             'marginMode': 'cross',
             'positionSide': leverage_side
