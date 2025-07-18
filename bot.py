@@ -1,3 +1,5 @@
+# volume_filtered_trade_bot.py
+
 import time
 import pandas as pd
 import numpy as np
@@ -10,12 +12,17 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['ETH/USDT:USDT']
+SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT', 'XRP/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.04')
-TP_PERCENT = Decimal('0.02')
-SL_PERCENT = Decimal('0.03')
-COOLDOWN_PERIOD = 60 * 60 * 2
+ORDER_SIZE_BY_SYMBOL = {
+    'ETH/USDT:USDT': Decimal('0.02'),
+    'BTC/USDT:USDT': Decimal('0.00068'),
+    'XRP/USDT:USDT': Decimal('24')
+}
+TP_PERCENT = Decimal('0.01')
+SL_PERCENT = Decimal('0.02') 
+COOLDOWN_PERIOD = 60 * 60 * 2  # 4 hours
+
 
 exchange = ccxt.bingx({
     'apiKey': "wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg",
@@ -23,36 +30,36 @@ exchange = ccxt.bingx({
     'enableRateLimit': True,
     'options': {
         'defaultType': 'swap',
-        'defaultMarginMode': 'cross'
     }
 })
 
-last_trade_time = {}
+last_trade_time = {symbol: 0 for symbol in SYMBOLS}
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"📈 Fetching OHLCV for {symbol}...")
+    print(f"\U0001F4C8 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
     return df
 
-# ================== BALANCE ===================
 def get_balance():
     balance = exchange.fetch_balance({'type': 'swap'})
     usdt = balance.get('free', {}).get('USDT', 0)
     print(f"[DEBUG] USDT Free Balance: {usdt}")
     return Decimal(str(usdt))
 
+
 def generate_client_order_id():
     return "ccbot-" + uuid.uuid4().hex[:16]
+
 
 # ================== ORDER EXECUTION ===================
 def place_order(symbol, side, entry_price):
     print(f"🛒 Placing {side.upper()} order on {symbol}...")
     try:
         entry_price = float(entry_price)
-        qty = float(ORDER_SIZE_ETH)
+        qty = float(ORDER_SIZE_BY_SYMBOL.get(symbol, Decimal('0')))
     except Exception as e:
         print(f"[Qty Error] {e}")
         return
@@ -72,15 +79,11 @@ def place_order(symbol, side, entry_price):
         print(f"[Leverage Error] {e}")
         return
 
-    try:
-        exchange.set_margin_mode('cross', symbol)
-    except Exception as e:
-        print(f"[Margin Mode Error] {e}")
-
     order_params = {
+        'marginMode': 'cross',
         'positionSide': leverage_side,
-        'clientOrderId': generate_client_order_id(),
-        'marginMode': 'cross'
+        'type': 'swap',
+        'clientOrderId': generate_client_order_id()
     }
 
     try:
@@ -93,7 +96,7 @@ def place_order(symbol, side, entry_price):
     tp_price = round(entry_price * (1 + float(TP_PERCENT)) if side == 'buy' else entry_price * (1 - float(TP_PERCENT)), 2)
 
     try:
-        exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, None, {
+        exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
             'stopPrice': sl_price,
             'marginMode': 'cross',
             'positionSide': leverage_side
@@ -102,7 +105,7 @@ def place_order(symbol, side, entry_price):
         print(f"[SL Error] {e}")
 
     try:
-        exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, None, {
+        exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
             'stopPrice': tp_price,
             'marginMode': 'cross',
             'positionSide': leverage_side
@@ -112,6 +115,7 @@ def place_order(symbol, side, entry_price):
 
     last_trade_time[symbol] = time.time()
     return order
+
 
 def in_position(symbol):
     positions = exchange.fetch_positions([symbol])
@@ -123,6 +127,7 @@ def in_position(symbol):
 # ================== STRATEGY ==================
 def compute_ema(series, period):
     return series.ewm(span=period, adjust=False).mean()
+
 
 def compute_vwap(df):
     tp = (df['high'] + df['low'] + df['close']) / 3
@@ -184,17 +189,10 @@ def trade_logic(symbol):
 if __name__ == '__main__':
     print("🚀 Trading bot started...")
     while True:
-        trade_made = False
         for symbol in SYMBOLS:
             try:
-                if trade_logic(symbol):
-                    trade_made = True
+                trade_logic(symbol)
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
-
-        if trade_made:
-            print("⏰ Sleeping for 4 hours after trade...")
-            time.sleep(COOLDOWN_PERIOD)
-        else:
-            print("⏰ No trade, sleeping 60 seconds...")
-            time.sleep(60)
+        print("⏰ Cycle complete, sleeping 60 seconds...")
+        time.sleep(60)
