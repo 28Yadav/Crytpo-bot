@@ -1,3 +1,5 @@
+# volume_filtered_trade_bot.py
+
 import time
 import pandas as pd
 import numpy as np
@@ -12,10 +14,10 @@ getcontext().prec = 18
 
 SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.02')
-TP_PERCENT = Decimal('0.01')
-SL_PERCENT = Decimal('0.02')
-COOLDOWN_PERIOD = 60 * 60 * 4  # 4 hours
+ORDER_SIZE_ETH = Decimal('0.027')
+TP_PERCENT = Decimal('0.02')
+SL_PERCENT = Decimal('0.03')
+COOLDOWN_PERIOD = 60 * 60 * 2  # 4 hours
 
 exchange = ccxt.bingx({
     'apiKey': "wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg",
@@ -72,7 +74,7 @@ def place_order(symbol, side, entry_price):
         return
 
     order_params = {
-        'marginMode': 'isolated',
+        'marginMode': 'cross',
         'positionSide': leverage_side,
         'type': 'swap',
         'clientOrderId': generate_client_order_id()
@@ -90,7 +92,7 @@ def place_order(symbol, side, entry_price):
     try:
         exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
             'stopPrice': sl_price,
-            'marginMode': 'isolated',
+            'marginMode': 'cross',
             'positionSide': leverage_side
         })
     except Exception as e:
@@ -99,7 +101,7 @@ def place_order(symbol, side, entry_price):
     try:
         exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
             'stopPrice': tp_price,
-            'marginMode': 'isolated',
+            'marginMode': 'cross',
             'positionSide': leverage_side
         })
     except Exception as e:
@@ -193,4 +195,3 @@ if __name__ == '__main__':
         else:
             print("⏰ No trade, sleeping 60 seconds...")
             time.sleep(60)
-
