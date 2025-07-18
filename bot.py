@@ -12,7 +12,7 @@ getcontext().prec = 18
 
 SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
-ORDER_SIZE_ETH = Decimal('0.03')
+ORDER_SIZE_ETH = Decimal('0.04')
 TP_PERCENT = Decimal('0.02')
 SL_PERCENT = Decimal('0.03')
 COOLDOWN_PERIOD = 60 * 60 * 2
