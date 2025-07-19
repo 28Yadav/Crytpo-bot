@@ -15,11 +15,11 @@ getcontext().prec = 18
 SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
-    'ETH/USDT:USDT': Decimal('0.02'),
-    'BTC/USDT:USDT': Decimal('0.00068')
+    'ETH/USDT:USDT': Decimal('0.03'),
+    'BTC/USDT:USDT': Decimal('0.00085')
 }
-TP_PERCENT = Decimal('0.01')
-SL_PERCENT = Decimal('0.06') 
+TP_PERCENT = Decimal('0.02')
+SL_PERCENT = Decimal('0.08') 
 COOLDOWN_PERIOD = 60 * 60 * 2  # 4 hours
 
 
