@@ -12,12 +12,11 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT', 'XRP/USDT:USDT']
+SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
     'ETH/USDT:USDT': Decimal('0.02'),
-    'BTC/USDT:USDT': Decimal('0.00068'),
-    'XRP/USDT:USDT': Decimal('24')
+    'BTC/USDT:USDT': Decimal('0.00068')
 }
 TP_PERCENT = Decimal('0.01')
 SL_PERCENT = Decimal('0.06') 
