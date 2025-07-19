@@ -20,7 +20,7 @@ ORDER_SIZE_BY_SYMBOL = {
 }
 TP_PERCENT = Decimal('0.02')
 SL_PERCENT = Decimal('0.08') 
-COOLDOWN_PERIOD = 60 * 60 * 2  # 4 hours
+COOLDOWN_PERIOD = 60 * 30  # 4 hours
 
 
 exchange = ccxt.bingx({
