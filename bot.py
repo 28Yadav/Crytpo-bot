@@ -20,7 +20,7 @@ ORDER_SIZE_BY_SYMBOL = {
     'XRP/USDT:USDT': Decimal('24')
 }
 TP_PERCENT = Decimal('0.01')
-SL_PERCENT = Decimal('0.02') 
+SL_PERCENT = Decimal('0.06') 
 COOLDOWN_PERIOD = 60 * 60 * 2  # 4 hours
 
 
