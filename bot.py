@@ -1,5 +1,4 @@
-
-# volume_filtered_trade_bot.py
+# File: trading_bot_macd_adx.py
 
 import time
 import pandas as pd
@@ -21,8 +20,7 @@ ORDER_SIZE_BY_SYMBOL = {
 }
 TP_PERCENT = Decimal('0.02')
 SL_PERCENT = Decimal('0.08') 
-COOLDOWN_PERIOD = 60 * 30  # 4 hours
-
+COOLDOWN_PERIOD = 60 * 30
 
 exchange = ccxt.bingx({
     'apiKey': "wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg",
@@ -37,7 +35,7 @@ last_trade_time = {symbol: 0 for symbol in SYMBOLS}
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"\U0001F4C8 Fetching OHLCV for {symbol}...")
+    print(f"📈 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -49,12 +47,10 @@ def get_balance():
     print(f"[DEBUG] USDT Free Balance: {usdt}")
     return Decimal(str(usdt))
 
-
 def generate_client_order_id():
     return "ccbot-" + uuid.uuid4().hex[:16]
 
-
-# ================== ORDER EXECUTION ===================
+# ================== ORDER EXECUTION =======================# 
 def place_order(symbol, side, entry_price):
     print(f"🛒 Placing {side.upper()} order on {symbol}...")
     try:
@@ -116,7 +112,6 @@ def place_order(symbol, side, entry_price):
     last_trade_time[symbol] = time.time()
     return order
 
-
 def in_position(symbol):
     positions = exchange.fetch_positions([symbol])
     for pos in positions:
@@ -125,24 +120,42 @@ def in_position(symbol):
     return False
 
 # ================== STRATEGY ==================
-def compute_ema(series, period):
-    return series.ewm(span=period, adjust=False).mean()
+def compute_macd(df):
+    ema12 = df['close'].ewm(span=12, adjust=False).mean()
+    ema26 = df['close'].ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    return macd_line, signal_line
 
-
-def compute_vwap(df):
-    tp = (df['high'] + df['low'] + df['close']) / 3
-    vwap = (tp * df['volume']).cumsum() / df['volume'].cumsum()
-    return vwap
+def compute_adx(df, period=14):
+    delta_high = df['high'].diff()
+    delta_low = df['low'].diff()
+    plus_dm = np.where((delta_high > delta_low) & (delta_high > 0), delta_high, 0)
+    minus_dm = np.where((delta_low > delta_high) & (delta_low > 0), delta_low, 0)
+    tr1 = df['high'] - df['low']
+    tr2 = abs(df['high'] - df['close'].shift())
+    tr3 = abs(df['low'] - df['close'].shift())
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(window=period).mean()
+    plus_di = 100 * (pd.Series(plus_dm).rolling(window=period).sum() / atr)
+    minus_di = 100 * (pd.Series(minus_dm).rolling(window=period).sum() / atr)
+    dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
+    adx = dx.rolling(window=period).mean()
+    return adx, plus_di, minus_di
 
 def is_fresh_signal(df):
-    if len(df) < 2:
+    if len(df) < 3:
         return False
-    prev = df.iloc[-2]
-    last = df.iloc[-1]
-    return (
-        (prev['ema_9'] <= prev['ema_21'] and last['ema_9'] > last['ema_21']) or
-        (prev['ema_9'] >= prev['ema_21'] and last['ema_9'] < last['ema_21'])
-    )
+    macd_line, signal_line = compute_macd(df)
+    adx, plus_di, minus_di = compute_adx(df)
+    prev_macd_cross = macd_line.iloc[-3] < signal_line.iloc[-3] and macd_line.iloc[-2] > signal_line.iloc[-2]
+    prev_macd_cross_down = macd_line.iloc[-3] > signal_line.iloc[-3] and macd_line.iloc[-2] < signal_line.iloc[-2]
+    fresh_adx_up = adx.iloc[-2] < 25 and adx.iloc[-1] >= 25
+    if (prev_macd_cross and plus_di.iloc[-1] > minus_di.iloc[-1] and fresh_adx_up):
+        return 'buy'
+    elif (prev_macd_cross_down and minus_di.iloc[-1] > plus_di.iloc[-1] and fresh_adx_up):
+        return 'sell'
+    return None
 
 def trade_logic(symbol):
     print(f"🔍 Analyzing {symbol}...")
@@ -157,33 +170,16 @@ def trade_logic(symbol):
             return False
 
     df = fetch_ohlcv(symbol, TIMEFRAME)
-    df['vwap'] = compute_vwap(df)
-    df['ema_9'] = compute_ema(df['close'], 9)
-    df['ema_21'] = compute_ema(df['close'], 21)
-
-    last = df.iloc[-1]
-    price = last['close']
-    vwap = last['vwap']
-    ema9 = last['ema_9']
-    ema21 = last['ema_21']
-
-    if not is_fresh_signal(df):
+    signal = is_fresh_signal(df)
+    if not signal:
         print("⚠️ Signal not fresh. Skipping...")
         return False
 
-    if ema9 > ema21 and price > vwap:
-        place_order(symbol, 'buy', price)
-        print(f"✅ LONG {symbol}")
-        return True
-
-    elif ema9 < ema21 and price < vwap:
-        place_order(symbol, 'sell', price)
-        print(f"✅ SHORT {symbol}")
-        return True
-
-    else:
-        print("⏸️ No trade condition met")
-        return False
+    last = df.iloc[-1]
+    price = last['close']
+    place_order(symbol, signal, price)
+    print(f"✅ {signal.upper()} {symbol}")
+    return True
 
 # ================== MAIN =====================
 if __name__ == '__main__':
