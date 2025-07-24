@@ -15,8 +15,8 @@ getcontext().prec = 18
 SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
-    'ETH/USDT:USDT': Decimal('0.05'),
-    'BTC/USDT:USDT': Decimal('0.002')
+    'ETH/USDT:USDT': Decimal('0.04'),
+    'BTC/USDT:USDT': Decimal('0.001')
 }
 TP_PERCENT = Decimal('0.02')
 SL_PERCENT = Decimal('0.08') 
@@ -52,7 +52,7 @@ def generate_client_order_id():
 
 # ================== ORDER EXECUTION =======================# 
 def place_order(symbol, side, entry_price):
-    print(f"🛒 Placing {side.upper()} order on {symbol}...")
+    print(f"\U0001F6D2 Placing {side.upper()} order on {symbol}...")
     try:
         entry_price = float(entry_price)
         qty = float(ORDER_SIZE_BY_SYMBOL.get(symbol, Decimal('0')))
@@ -92,21 +92,21 @@ def place_order(symbol, side, entry_price):
     tp_price = round(entry_price * (1 + float(TP_PERCENT)) if side == 'buy' else entry_price * (1 - float(TP_PERCENT)), 2)
 
     try:
-        exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
+        exchange.create_order(symbol, 'stop_market', 'sell' if side == 'buy' else 'buy', qty, None, {
+            'triggerPrice': sl_price,
             'stopPrice': sl_price,
-            'marginMode': 'cross',
             'positionSide': leverage_side,
-            'reduceOnly': True
+            'marginMode': 'cross'
         })
     except Exception as e:
         print(f"[SL Error] {e}")
 
     try:
-        exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
+        exchange.create_order(symbol, 'take_profit_market', 'sell' if side == 'buy' else 'buy', qty, None, {
+            'triggerPrice': tp_price,
             'stopPrice': tp_price,
-            'marginMode': 'cross',
             'positionSide': leverage_side,
-            'reduceOnly': True
+            'marginMode': 'cross'
         })
     except Exception as e:
         print(f"[TP Error] {e}")
@@ -170,15 +170,15 @@ def is_fresh_signal(df):
     return None
 
 def trade_logic(symbol):
-    print(f"🔍 Analyzing {symbol}...")
+    print(f"\U0001F50D Analyzing {symbol}...")
     if in_position(symbol):
-        print(f"⛔️ Already in position for {symbol}")
+        print(f"\u26D4\uFE0F Already in position for {symbol}")
         return False
 
     if symbol in last_trade_time:
         since_last = time.time() - last_trade_time[symbol]
         if since_last < COOLDOWN_PERIOD:
-            print(f"⏳ Cooling down ({int((COOLDOWN_PERIOD - since_last) / 60)} min left)...")
+            print(f"\u23F3 Cooling down ({int((COOLDOWN_PERIOD - since_last) / 60)} min left)...")
             return False
 
     df = fetch_ohlcv(symbol, TIMEFRAME)
@@ -195,12 +195,12 @@ def trade_logic(symbol):
 
 # ================== MAIN =====================
 if __name__ == '__main__':
-    print("🚀 Trading bot started...")
+    print("\U0001F680 Trading bot started...")
     while True:
         for symbol in SYMBOLS:
             try:
                 trade_logic(symbol)
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
-        print("⏰ Cycle complete, sleeping 60 seconds...")
+        print("\u23F0 Cycle complete, sleeping 60 seconds...")
         time.sleep(60)
