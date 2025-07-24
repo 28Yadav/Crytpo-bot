@@ -1,4 +1,3 @@
-# File: trading_bot_macd_adx.py
 # FILE: trading_bot.py
 
 import time
@@ -96,7 +95,8 @@ def place_order(symbol, side, entry_price):
         exchange.create_order(symbol, 'STOP_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
             'stopPrice': sl_price,
             'marginMode': 'cross',
-            'positionSide': leverage_side
+            'positionSide': leverage_side,
+            'reduceOnly': True
         })
     except Exception as e:
         print(f"[SL Error] {e}")
@@ -105,7 +105,8 @@ def place_order(symbol, side, entry_price):
         exchange.create_order(symbol, 'TAKE_PROFIT_MARKET', 'sell' if side == 'buy' else 'buy', qty, 0.0, {
             'stopPrice': tp_price,
             'marginMode': 'cross',
-            'positionSide': leverage_side
+            'positionSide': leverage_side,
+            'reduceOnly': True
         })
     except Exception as e:
         print(f"[TP Error] {e}")
