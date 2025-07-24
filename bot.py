@@ -1,4 +1,5 @@
 # File: trading_bot_macd_adx.py
+# FILE: trading_bot.py
 
 import time
 import pandas as pd
@@ -35,7 +36,7 @@ last_trade_time = {symbol: 0 for symbol in SYMBOLS}
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"📈 Fetching OHLCV for {symbol}...")
+    print(f"\U0001F4C8 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -120,40 +121,50 @@ def in_position(symbol):
     return False
 
 # ================== STRATEGY ==================
-def compute_macd(df):
-    ema12 = df['close'].ewm(span=12, adjust=False).mean()
-    ema26 = df['close'].ewm(span=26, adjust=False).mean()
-    macd_line = ema12 - ema26
-    signal_line = macd_line.ewm(span=9, adjust=False).mean()
-    return macd_line, signal_line
+def compute_supertrend(df, period=10, multiplier=3):
+    hl2 = (df['high'] + df['low']) / 2
+    atr = df['high'].combine(df['low'], max) - df['low'].combine(df['high'], min)
+    atr = atr.rolling(window=period).mean()
 
-def compute_adx(df, period=14):
-    delta_high = df['high'].diff()
-    delta_low = df['low'].diff()
-    plus_dm = np.where((delta_high > delta_low) & (delta_high > 0), delta_high, 0)
-    minus_dm = np.where((delta_low > delta_high) & (delta_low > 0), delta_low, 0)
-    tr1 = df['high'] - df['low']
-    tr2 = abs(df['high'] - df['close'].shift())
-    tr3 = abs(df['low'] - df['close'].shift())
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    atr = tr.rolling(window=period).mean()
-    plus_di = 100 * (pd.Series(plus_dm).rolling(window=period).sum() / atr)
-    minus_di = 100 * (pd.Series(minus_dm).rolling(window=period).sum() / atr)
-    dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
-    adx = dx.rolling(window=period).mean()
-    return adx, plus_di, minus_di
+    upperband = hl2 + (multiplier * atr)
+    lowerband = hl2 - (multiplier * atr)
+
+    supertrend = pd.Series(index=df.index, dtype='float64')
+    direction = pd.Series(index=df.index, dtype='bool')
+
+    for i in range(1, len(df)):
+        if df['close'][i] > upperband[i - 1]:
+            supertrend[i] = lowerband[i]
+            direction[i] = True
+        elif df['close'][i] < lowerband[i - 1]:
+            supertrend[i] = upperband[i]
+            direction[i] = False
+        else:
+            supertrend[i] = supertrend[i - 1]
+            direction[i] = direction[i - 1]
+
+    return direction
+
+def compute_stochastic(df, k_period=14, d_period=3):
+    low_min = df['low'].rolling(window=k_period).min()
+    high_max = df['high'].rolling(window=k_period).max()
+    k = 100 * (df['close'] - low_min) / (high_max - low_min)
+    d = k.rolling(window=d_period).mean()
+    return k, d
 
 def is_fresh_signal(df):
-    if len(df) < 3:
-        return False
-    macd_line, signal_line = compute_macd(df)
-    adx, plus_di, minus_di = compute_adx(df)
-    prev_macd_cross = macd_line.iloc[-3] < signal_line.iloc[-3] and macd_line.iloc[-2] > signal_line.iloc[-2]
-    prev_macd_cross_down = macd_line.iloc[-3] > signal_line.iloc[-3] and macd_line.iloc[-2] < signal_line.iloc[-2]
-    fresh_adx_up = adx.iloc[-2] < 25 and adx.iloc[-1] >= 25
-    if (prev_macd_cross and plus_di.iloc[-1] > minus_di.iloc[-1] and fresh_adx_up):
+    if len(df) < 20:
+        return None
+
+    st_dir = compute_supertrend(df)
+    k, d = compute_stochastic(df)
+
+    cross_up = k.iloc[-3] < d.iloc[-3] and k.iloc[-2] > d.iloc[-2]
+    cross_down = k.iloc[-3] > d.iloc[-3] and k.iloc[-2] < d.iloc[-2]
+
+    if cross_up and st_dir.iloc[-1]:
         return 'buy'
-    elif (prev_macd_cross_down and minus_di.iloc[-1] > plus_di.iloc[-1] and fresh_adx_up):
+    elif cross_down and not st_dir.iloc[-1]:
         return 'sell'
     return None
 
