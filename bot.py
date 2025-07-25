@@ -21,6 +21,8 @@ ORDER_SIZE_BY_SYMBOL = {
 TP_PERCENT = Decimal('0.02')
 SL_PERCENT = Decimal('0.05') 
 COOLDOWN_PERIOD = 60 * 30
+FRESH_SIGNAL_MAX_AGE_CANDLES = 1
+FRESH_SIGNAL_MAX_PRICE_DEVIATION = 0.005  # 0.5%
 
 exchange = ccxt.bingx({
     'apiKey': "wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg",
@@ -160,13 +162,23 @@ def is_fresh_signal(df):
     st_dir = compute_supertrend(df)
     k, d = compute_stochastic(df)
 
-    cross_up = k.iloc[-3] < d.iloc[-3] and k.iloc[-2] > d.iloc[-2]
-    cross_down = k.iloc[-3] > d.iloc[-3] and k.iloc[-2] < d.iloc[-2]
+    signal = None
+    price = df.iloc[-1]['close']
+
+    cross_up = k.iloc[-2] < d.iloc[-2] and k.iloc[-1] > d.iloc[-1]
+    cross_down = k.iloc[-2] > d.iloc[-2] and k.iloc[-1] < d.iloc[-1]
 
     if cross_up and st_dir.iloc[-1]:
-        return 'buy'
+        signal = 'buy'
     elif cross_down and not st_dir.iloc[-1]:
-        return 'sell'
+        signal = 'sell'
+
+    if signal:
+        signal_price = df.iloc[-2]['close']
+        deviation = abs(price - signal_price) / signal_price
+        if deviation > FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+            return None
+        return signal
     return None
 
 def trade_logic(symbol):
