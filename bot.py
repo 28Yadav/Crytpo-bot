@@ -90,18 +90,7 @@ def place_order(symbol, side, entry_price):
         print(f"[FAILURE] Order rejected: {str(e)}")
         return
 
-    sl_price = round(entry_price * (1 - float(SL_PERCENT)) if side == 'buy' else entry_price * (1 + float(SL_PERCENT)), 2)
     tp_price = round(entry_price * (1 + float(TP_PERCENT)) if side == 'buy' else entry_price * (1 - float(TP_PERCENT)), 2)
-
-    try:
-        exchange.create_order(symbol, 'stop_market', 'sell' if side == 'buy' else 'buy', qty, None, {
-            'triggerPrice': sl_price,
-            'stopPrice': sl_price,
-            'positionSide': leverage_side,
-            'marginMode': 'cross'
-        })
-    except Exception as e:
-        print(f"[SL Error] {e}")
 
     try:
         exchange.create_order(symbol, 'take_profit_market', 'sell' if side == 'buy' else 'buy', qty, None, {
