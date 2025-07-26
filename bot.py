@@ -18,7 +18,7 @@ ORDER_SIZE_BY_SYMBOL = {
     'ETH/USDT:USDT': Decimal('0.05'),
     'BTC/USDT:USDT': Decimal('0.002')
 }
-TP_PERCENT = Decimal('0.02')
+TP_PERCENT = Decimal('0.01')
 SL_PERCENT = Decimal('0.05') 
 COOLDOWN_PERIOD = 60 * 30
 FRESH_SIGNAL_MAX_AGE_CANDLES = 1
