@@ -18,7 +18,7 @@ ORDER_SIZE_BY_SYMBOL = {
     'ETH/USDT:USDT': Decimal('0.05'),
     'BTC/USDT:USDT': Decimal('0.002')
 }
-TP_PERCENT = Decimal('0.01')
+TP_PERCENT = Decimal('0.02')
 SL_PERCENT = Decimal('0.05') 
 COOLDOWN_PERIOD = 60 * 30
 FRESH_SIGNAL_MAX_AGE_CANDLES = 1
@@ -72,7 +72,7 @@ def place_order(symbol, side, entry_price):
 
     try:
         leverage_side = 'LONG' if side == 'buy' else 'SHORT'
-        exchange.set_leverage(15, symbol, params={'side': leverage_side})
+        exchange.set_leverage(15, symbol, params={'marginMode': 'cross'})
     except Exception as e:
         print(f"[Leverage Error] {e}")
         return
