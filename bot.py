@@ -15,14 +15,14 @@ getcontext().prec = 18
 SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
-    'ETH/USDT:USDT': Decimal('0.03'),
-    'BTC/USDT:USDT': Decimal('0.002')
+    'ETH/USDT:USDT': Decimal('0.07'),
+    'BTC/USDT:USDT': Decimal('0.0025')
 }
-TP_PERCENT = Decimal('0.02')
+TP_PERCENT = Decimal('0.01')
 SL_PERCENT = Decimal('0.05') 
 COOLDOWN_PERIOD = 60 * 30
 FRESH_SIGNAL_MAX_AGE_CANDLES = 1
-FRESH_SIGNAL_MAX_PRICE_DEVIATION = 0.005  # 0.5%
+FRESH_SIGNAL_MAX_PRICE_DEVIATION = 0.004  # 0.5%
 
 exchange = ccxt.bingx({
     'apiKey': "wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg",
@@ -37,7 +37,7 @@ last_trade_time = {symbol: 0 for symbol in SYMBOLS}
 
 # ================== DATA FETCH ================
 def fetch_ohlcv(symbol, timeframe, limit=150):
-    print(f"\U0001F4C8 Fetching OHLCV for {symbol}...")
+    print(f"📈 Fetching OHLCV for {symbol}...")
     ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -54,7 +54,7 @@ def generate_client_order_id():
 
 # ================== ORDER EXECUTION =======================# 
 def place_order(symbol, side, entry_price):
-    print(f"\U0001F6D2 Placing {side.upper()} order on {symbol}...")
+    print(f"🛒 Placing {side.upper()} order on {symbol}...")
     try:
         entry_price = float(entry_price)
         qty = float(ORDER_SIZE_BY_SYMBOL.get(symbol, Decimal('0')))
@@ -166,26 +166,28 @@ def is_fresh_signal(df):
         signal_price = df.iloc[-2]['close']
         deviation = abs(price - signal_price) / signal_price
         if deviation > FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+            print("signal not fresh")
             return None
         return signal
+
+    print("no signal, not opening trade")
     return None
 
 def trade_logic(symbol):
-    print(f"\U0001F50D Analyzing {symbol}...")
+    print(f"🔍 Analyzing {symbol}...")
     if in_position(symbol):
-        print(f"\u26D4\uFE0F Already in position for {symbol}")
+        print(f"⛔️ Already in position for {symbol}")
         return False
 
     if symbol in last_trade_time:
         since_last = time.time() - last_trade_time[symbol]
         if since_last < COOLDOWN_PERIOD:
-            print(f"\u23F3 Cooling down ({int((COOLDOWN_PERIOD - since_last) / 60)} min left)...")
+            print(f"⏳ Cooling down ({int((COOLDOWN_PERIOD - since_last) / 60)} min left)...")
             return False
 
     df = fetch_ohlcv(symbol, TIMEFRAME)
     signal = is_fresh_signal(df)
     if not signal:
-        print("⚠️ Signal not fresh. Skipping...")
         return False
 
     last = df.iloc[-1]
@@ -196,13 +198,12 @@ def trade_logic(symbol):
 
 # ================== MAIN =====================
 if __name__ == '__main__':
-    print("\U0001F680 Trading bot started...")
+    print("🚀 Trading bot started...")
     while True:
         for symbol in SYMBOLS:
             try:
                 trade_logic(symbol)
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
-        print("\u23F0 Cycle complete, sleeping 60 seconds...")
+        print("⏰ Cycle complete, sleeping 60 seconds...")
         time.sleep(60)
-
