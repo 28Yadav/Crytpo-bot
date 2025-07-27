@@ -15,7 +15,7 @@ getcontext().prec = 18
 SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
-    'ETH/USDT:USDT': Decimal('0.05'),
+    'ETH/USDT:USDT': Decimal('0.03'),
     'BTC/USDT:USDT': Decimal('0.002')
 }
 TP_PERCENT = Decimal('0.02')
