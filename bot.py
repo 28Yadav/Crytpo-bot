@@ -206,4 +206,4 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"[Unhandled Error] {e}")
         print("⏰ Cycle complete, sleeping 60 seconds...")
-        time.sleep(60)
+        time.sleep(30)
