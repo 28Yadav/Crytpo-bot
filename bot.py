@@ -72,7 +72,7 @@ def place_order(symbol, side, entry_price):
 
     try:
         leverage_side = 'LONG' if side == 'buy' else 'SHORT'
-        exchange.set_leverage(15, symbol, params={'marginMode': 'cross'})
+        exchange.set_leverage(15, symbol, params={'marginMode': 'cross', 'side': leverage_side})
     except Exception as e:
         print(f"[Leverage Error] {e}")
         return
