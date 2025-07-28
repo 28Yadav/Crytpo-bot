@@ -1,3 +1,4 @@
+# FILE: trading_bot.py
 
 import time
 import pandas as pd
@@ -72,7 +73,7 @@ def place_order(symbol, side, entry_price, atr):
 
     try:
         leverage_side = 'LONG' if side == 'buy' else 'SHORT'
-        exchange.set_leverage(15, symbol, params={'marginMode': 'cross'})
+        exchange.set_leverage(15, symbol, params={'marginMode': 'cross', 'side': leverage_side})
     except Exception as e:
         print(f"[Leverage Error] {e}")
         return
@@ -99,6 +100,7 @@ def place_order(symbol, side, entry_price, atr):
             'reduceOnly': True,
             'newClientOrderId': generate_client_order_id(),
             'stopPrice': tp_price,
+            'side': 'sell' if side == 'buy' else 'buy'
         })
         print(f"[TP Order] Created at {tp_price}")
 
@@ -108,6 +110,7 @@ def place_order(symbol, side, entry_price, atr):
             'reduceOnly': True,
             'newClientOrderId': generate_client_order_id(),
             'stopPrice': sl_price,
+            'side': 'sell' if side == 'buy' else 'buy'
         })
         print(f"[SL Order] Created at {sl_price}")
 
