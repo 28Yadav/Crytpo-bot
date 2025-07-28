@@ -1,4 +1,3 @@
-# FILE: trading_bot.py
 
 import time
 import pandas as pd
@@ -73,16 +72,15 @@ def place_order(symbol, side, entry_price, atr):
 
     try:
         leverage_side = 'LONG' if side == 'buy' else 'SHORT'
-        exchange.set_leverage(15, symbol, params={'marginMode': 'cross', 'side': leverage_side})
+        exchange.set_leverage(15, symbol, params={'marginMode': 'cross'})
     except Exception as e:
         print(f"[Leverage Error] {e}")
         return
 
     order_params = {
-        'marginMode': 'cross',
         'positionSide': leverage_side,
-        'type': 'swap',
-        'clientOrderId': generate_client_order_id()
+        'reduceOnly': False,
+        'newClientOrderId': generate_client_order_id()
     }
 
     try:
@@ -95,18 +93,24 @@ def place_order(symbol, side, entry_price, atr):
     sl_price = round(entry_price - float(atr * SL_MULTIPLIER) if side == 'buy' else entry_price + float(atr * SL_MULTIPLIER), 2)
 
     try:
-        exchange.create_order(symbol, 'take_profit_market', 'sell' if side == 'buy' else 'buy', qty, None, {
+        tp_order = exchange.create_order(symbol, 'take_profit_market', 'sell' if side == 'buy' else 'buy', qty, None, {
             'triggerPrice': tp_price,
+            'positionSide': leverage_side,
+            'reduceOnly': True,
+            'newClientOrderId': generate_client_order_id(),
             'stopPrice': tp_price,
-            'positionSide': leverage_side,
-            'marginMode': 'cross'
         })
-        exchange.create_order(symbol, 'stop_market', 'sell' if side == 'buy' else 'buy', qty, None, {
+        print(f"[TP Order] Created at {tp_price}")
+
+        sl_order = exchange.create_order(symbol, 'stop_market', 'sell' if side == 'buy' else 'buy', qty, None, {
             'triggerPrice': sl_price,
-            'stopPrice': sl_price,
             'positionSide': leverage_side,
-            'marginMode': 'cross'
+            'reduceOnly': True,
+            'newClientOrderId': generate_client_order_id(),
+            'stopPrice': sl_price,
         })
+        print(f"[SL Order] Created at {sl_price}")
+
     except Exception as e:
         print(f"[TP/SL Error] {e}")
 
