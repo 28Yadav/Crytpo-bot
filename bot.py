@@ -80,7 +80,6 @@ def place_order(symbol, side, entry_price, atr):
 
     order_params = {
         'positionSide': leverage_side,
-        'reduceOnly': False,
         'newClientOrderId': generate_client_order_id()
     }
 
@@ -97,20 +96,16 @@ def place_order(symbol, side, entry_price, atr):
         tp_order = exchange.create_order(symbol, 'take_profit_market', 'sell' if side == 'buy' else 'buy', qty, None, {
             'triggerPrice': tp_price,
             'positionSide': leverage_side,
-            'reduceOnly': True,
             'newClientOrderId': generate_client_order_id(),
-            'stopPrice': tp_price,
-            'side': 'sell' if side == 'buy' else 'buy'
+            'stopPrice': tp_price
         })
         print(f"[TP Order] Created at {tp_price}")
 
         sl_order = exchange.create_order(symbol, 'stop_market', 'sell' if side == 'buy' else 'buy', qty, None, {
             'triggerPrice': sl_price,
             'positionSide': leverage_side,
-            'reduceOnly': True,
             'newClientOrderId': generate_client_order_id(),
-            'stopPrice': sl_price,
-            'side': 'sell' if side == 'buy' else 'buy'
+            'stopPrice': sl_price
         })
         print(f"[SL Order] Created at {sl_price}")
 
@@ -119,6 +114,7 @@ def place_order(symbol, side, entry_price, atr):
 
     last_trade_time[symbol] = time.time()
     return order
+
 
 def in_position(symbol):
     positions = exchange.fetch_positions([symbol])
