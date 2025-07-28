@@ -166,6 +166,7 @@ def compute_macd(df):
 
 def is_fresh_signal(df):
     if len(df) < 50:
+        print("📉 Not enough data to generate signals.")
         return None
 
     st_dir, atr = compute_supertrend(df)
@@ -177,8 +178,8 @@ def is_fresh_signal(df):
     macd_cross_up = macd.iloc[-2] < macd_signal.iloc[-2] and macd.iloc[-1] > macd_signal.iloc[-1]
     macd_cross_down = macd.iloc[-2] > macd_signal.iloc[-2] and macd.iloc[-1] < macd_signal.iloc[-1]
 
-    volatility = atr.iloc[-1]
-    if volatility < VOLATILITY_THRESHOLD:
+    print(f"[DEBUG] ATR: {atr.iloc[-1]:.4f}")
+    if atr.iloc[-1] < VOLATILITY_THRESHOLD:
         print("🔇 Skipping due to low volatility")
         return None
 
@@ -187,12 +188,20 @@ def is_fresh_signal(df):
     signal_price = df.iloc[-2]['close']
     deviation = abs(price - signal_price) / signal_price
 
+    print(f"[DEBUG] Stochastic: K={k.iloc[-1]:.2f}, D={d.iloc[-1]:.2f}, cross_up={cross_up}, cross_down={cross_down}")
+    print(f"[DEBUG] MACD: MACD={macd.iloc[-1]:.4f}, Signal={macd_signal.iloc[-1]:.4f}, macd_cross_up={macd_cross_up}, macd_cross_down={macd_cross_down}")
+    print(f"[DEBUG] Price deviation: {deviation:.4f}")
+
     if cross_up and st_dir.iloc[-1] and macd_cross_up and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'buy'
     elif cross_down and not st_dir.iloc[-1] and macd_cross_down and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'sell'
 
-    return (signal, atr.iloc[-1]) if signal else None
+    if not signal:
+        print("🚫 Conditions not met for signal.")
+        return None
+
+    return (signal, atr.iloc[-1])
 
 # ================== LOGIC ======================
 def trade_logic(symbol):
