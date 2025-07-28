@@ -157,12 +157,19 @@ def compute_stochastic(df, k_period=14, d_period=3):
     d = k.rolling(window=d_period).mean()
     return k, d
 
-def compute_macd(df):
-    ema12 = df['close'].ewm(span=12, adjust=False).mean()
-    ema26 = df['close'].ewm(span=26, adjust=False).mean()
-    macd = ema12 - ema26
-    signal = macd.ewm(span=9, adjust=False).mean()
-    return macd, signal
+def compute_adx(df, period=14):
+    plus_dm = df['high'].diff()
+    minus_dm = df['low'].diff().abs()
+
+    plus_dm[plus_dm < 0] = 0
+    minus_dm[minus_dm < 0] = 0
+
+    trur = compute_atr(df, period)
+    plus_di = 100 * (plus_dm.rolling(window=period).mean() / trur)
+    minus_di = 100 * (minus_dm.rolling(window=period).mean() / trur)
+    dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
+    adx = dx.rolling(window=period).mean()
+    return adx
 
 def is_fresh_signal(df):
     if len(df) < 50:
@@ -171,12 +178,10 @@ def is_fresh_signal(df):
 
     st_dir, atr = compute_supertrend(df)
     k, d = compute_stochastic(df)
-    macd, macd_signal = compute_macd(df)
+    adx = compute_adx(df)
 
     cross_up = k.iloc[-2] < d.iloc[-2] and k.iloc[-1] > d.iloc[-1]
     cross_down = k.iloc[-2] > d.iloc[-2] and k.iloc[-1] < d.iloc[-1]
-    macd_cross_up = macd.iloc[-2] < macd_signal.iloc[-2] and macd.iloc[-1] > macd_signal.iloc[-1]
-    macd_cross_down = macd.iloc[-2] > macd_signal.iloc[-2] and macd.iloc[-1] < macd_signal.iloc[-1]
 
     print(f"[DEBUG] ATR: {atr.iloc[-1]:.4f}")
     if atr.iloc[-1] < VOLATILITY_THRESHOLD:
@@ -189,12 +194,12 @@ def is_fresh_signal(df):
     deviation = abs(price - signal_price) / signal_price
 
     print(f"[DEBUG] Stochastic: K={k.iloc[-1]:.2f}, D={d.iloc[-1]:.2f}, cross_up={cross_up}, cross_down={cross_down}")
-    print(f"[DEBUG] MACD: MACD={macd.iloc[-1]:.4f}, Signal={macd_signal.iloc[-1]:.4f}, macd_cross_up={macd_cross_up}, macd_cross_down={macd_cross_down}")
+    print(f"[DEBUG] ADX: {adx.iloc[-1]:.2f}")
     print(f"[DEBUG] Price deviation: {deviation:.4f}")
 
-    if cross_up and st_dir.iloc[-1] and macd_cross_up and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+    if cross_up and st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'buy'
-    elif cross_down and not st_dir.iloc[-1] and macd_cross_down and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+    elif cross_down and not st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'sell'
 
     if not signal:
