@@ -58,9 +58,10 @@ def place_order(symbol, side, entry_price, atr):
     print(f"🛒 Placing {side.upper()} order on {symbol}...")
     try:
         entry_price = float(entry_price)
+        atr = float(atr)
         qty = float(ORDER_SIZE_BY_SYMBOL.get(symbol, Decimal('0')))
     except Exception as e:
-        print(f"[Qty Error] {e}")
+        print(f"[Qty/ATR Error] {e}")
         return
 
     print(f"[DEBUG] Qty: {qty}")
@@ -89,8 +90,8 @@ def place_order(symbol, side, entry_price, atr):
         print(f"[FAILURE] Order rejected: {str(e)}")
         return
 
-    tp_price = round(entry_price + float(atr * TP_MULTIPLIER) if side == 'buy' else entry_price - float(atr * TP_MULTIPLIER), 2)
-    sl_price = round(entry_price - float(atr * SL_MULTIPLIER) if side == 'buy' else entry_price + float(atr * SL_MULTIPLIER), 2)
+    tp_price = round(entry_price + atr * float(TP_MULTIPLIER) if side == 'buy' else entry_price - atr * float(TP_MULTIPLIER), 2)
+    sl_price = round(entry_price - atr * float(SL_MULTIPLIER) if side == 'buy' else entry_price + atr * float(SL_MULTIPLIER), 2)
 
     try:
         tp_order = exchange.create_order(symbol, 'take_profit_market', 'sell' if side == 'buy' else 'buy', qty, None, {
