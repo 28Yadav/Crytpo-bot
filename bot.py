@@ -15,8 +15,7 @@ getcontext().prec = 18
 SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
-    'ETH/USDT:USDT': Decimal('0.07'),
-    'BTC/USDT:USDT': Decimal('0.0025')
+    'ETH/USDT:USDT': Decimal('0.07')
 }
 TP_MULTIPLIER = Decimal('1.5')
 SL_MULTIPLIER = Decimal('7.0')
