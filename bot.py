@@ -15,10 +15,10 @@ getcontext().prec = 18
 SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
-    'ETH/USDT:USDT': Decimal('0.14')
+    'ETH/USDT:USDT': Decimal('0.07')
 }
 TP_MULTIPLIER = Decimal('2')
-SL_MULTIPLIER = Decimal('7.0')
+SL_MULTIPLIER = Decimal('2.0')
 COOLDOWN_PERIOD = 60 * 30
 FRESH_SIGNAL_MAX_AGE_CANDLES = 1
 FRESH_SIGNAL_MAX_PRICE_DEVIATION = 0.006
@@ -246,4 +246,5 @@ if __name__ == '__main__':
                 print(f"[Unhandled Error] {e}")
         print("⏰ Cycle complete, sleeping 60 seconds...")
         time.sleep(30)
+
 
