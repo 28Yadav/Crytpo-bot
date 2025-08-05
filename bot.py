@@ -153,12 +153,18 @@ def compute_supertrend(df, period=10, multiplier=3):
 
     return direction, atr
 
-def compute_stochastic(df, k_period=14, d_period=3):
-    low_min = df['low'].rolling(window=k_period).min()
-    high_max = df['high'].rolling(window=k_period).max()
-    k = 100 * (df['close'] - low_min) / (high_max - low_min)
-    d = k.rolling(window=d_period).mean()
-    return k, d
+def compute_ob_indicator(df, length=14, overbought=70, oversold=30):
+    # Using RSI as OB/OS indicator
+    delta = df['close'].diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+
+    avg_gain = gain.rolling(length).mean()
+    avg_loss = loss.rolling(length).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi, overbought, oversold
 
 def compute_adx(df, period=14):
     plus_dm = df['high'].diff()
@@ -180,11 +186,11 @@ def is_fresh_signal(df):
         return None
 
     st_dir, atr = compute_supertrend(df)
-    k, d = compute_stochastic(df)
+    rsi, ob_level, os_level = compute_ob_indicator(df)
     adx = compute_adx(df)
 
-    cross_up = k.iloc[-2] < d.iloc[-2] and k.iloc[-1] > d.iloc[-1]
-    cross_down = k.iloc[-2] > d.iloc[-2] and k.iloc[-1] < d.iloc[-1]
+    overbought_cross = rsi.iloc[-2] < ob_level and rsi.iloc[-1] >= ob_level
+    oversold_cross = rsi.iloc[-2] > os_level and rsi.iloc[-1] <= os_level
 
     print(f"[DEBUG] ATR: {atr.iloc[-1]:.4f}")
     if atr.iloc[-1] < VOLATILITY_THRESHOLD:
@@ -196,13 +202,13 @@ def is_fresh_signal(df):
     signal_price = df.iloc[-2]['close']
     deviation = abs(price - signal_price) / signal_price
 
-    print(f"[DEBUG] Stochastic: K={k.iloc[-1]:.2f}, D={d.iloc[-1]:.2f}, cross_up={cross_up}, cross_down={cross_down}")
+    print(f"[DEBUG] RSI: {rsi.iloc[-1]:.2f}, overbought_cross={overbought_cross}, oversold_cross={oversold_cross}")
     print(f"[DEBUG] ADX: {adx.iloc[-1]:.2f}")
     print(f"[DEBUG] Price deviation: {deviation:.4f}")
 
-    if cross_up and st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+    if oversold_cross and st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'buy'
-    elif cross_down and not st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+    elif overbought_cross and not st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'sell'
 
     if not signal:
@@ -246,5 +252,6 @@ if __name__ == '__main__':
                 print(f"[Unhandled Error] {e}")
         print("⏰ Cycle complete, sleeping 60 seconds...")
         time.sleep(30)
+
 
 
