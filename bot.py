@@ -15,7 +15,7 @@ getcontext().prec = 18
 SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
-    'ETH/USDT:USDT': Decimal('0.09')
+    'ETH/USDT:USDT': Decimal('0.14')
 }
 TP_MULTIPLIER = Decimal('2')
 SL_MULTIPLIER = Decimal('7.0')
@@ -246,3 +246,4 @@ if __name__ == '__main__':
                 print(f"[Unhandled Error] {e}")
         print("⏰ Cycle complete, sleeping 60 seconds...")
         time.sleep(30)
+
