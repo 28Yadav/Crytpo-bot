@@ -115,7 +115,6 @@ def place_order(symbol, side, entry_price, atr):
     last_trade_time[symbol] = time.time()
     return order
 
-
 def in_position(symbol):
     positions = exchange.fetch_positions([symbol])
     for pos in positions:
@@ -154,7 +153,6 @@ def compute_supertrend(df, period=10, multiplier=3):
     return direction, atr
 
 def compute_ob_indicator(df, length=14, overbought=70, oversold=30):
-    # Using RSI as OB/OS indicator
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -166,20 +164,6 @@ def compute_ob_indicator(df, length=14, overbought=70, oversold=30):
     rsi = 100 - (100 / (1 + rs))
     return rsi, overbought, oversold
 
-def compute_adx(df, period=14):
-    plus_dm = df['high'].diff()
-    minus_dm = df['low'].diff().abs()
-
-    plus_dm[plus_dm < 0] = 0
-    minus_dm[minus_dm < 0] = 0
-
-    trur = compute_atr(df, period)
-    plus_di = 100 * (plus_dm.rolling(window=period).mean() / trur)
-    minus_di = 100 * (minus_dm.rolling(window=period).mean() / trur)
-    dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
-    adx = dx.rolling(window=period).mean()
-    return adx
-
 def is_fresh_signal(df):
     if len(df) < 50:
         print("📉 Not enough data to generate signals.")
@@ -187,7 +171,6 @@ def is_fresh_signal(df):
 
     st_dir, atr = compute_supertrend(df)
     rsi, ob_level, os_level = compute_ob_indicator(df)
-    adx = compute_adx(df)
 
     overbought_cross = rsi.iloc[-2] < ob_level and rsi.iloc[-1] >= ob_level
     oversold_cross = rsi.iloc[-2] > os_level and rsi.iloc[-1] <= os_level
@@ -203,12 +186,11 @@ def is_fresh_signal(df):
     deviation = abs(price - signal_price) / signal_price
 
     print(f"[DEBUG] RSI: {rsi.iloc[-1]:.2f}, overbought_cross={overbought_cross}, oversold_cross={oversold_cross}")
-    print(f"[DEBUG] ADX: {adx.iloc[-1]:.2f}")
     print(f"[DEBUG] Price deviation: {deviation:.4f}")
 
-    if oversold_cross and st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+    if oversold_cross and st_dir.iloc[-1] and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'buy'
-    elif overbought_cross and not st_dir.iloc[-1] and adx.iloc[-1] > 20 and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
+    elif overbought_cross and not st_dir.iloc[-1] and deviation <= FRESH_SIGNAL_MAX_PRICE_DEVIATION:
         signal = 'sell'
 
     if not signal:
@@ -252,6 +234,3 @@ if __name__ == '__main__':
                 print(f"[Unhandled Error] {e}")
         print("⏰ Cycle complete, sleeping 60 seconds...")
         time.sleep(30)
-
-
-
