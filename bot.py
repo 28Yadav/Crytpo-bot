@@ -12,7 +12,7 @@ getcontext().prec = 18
 
 # ================== CONFIG ===================
 
-SYMBOLS = ['ETH/USDT:USDT', 'BTC/USDT:USDT']
+SYMBOLS = ['ETH/USDT:USDT']
 TIMEFRAME = '15m'
 ORDER_SIZE_BY_SYMBOL = {
     'ETH/USDT:USDT': Decimal('0.09')
@@ -229,6 +229,7 @@ if __name__ == '__main__':
                 print(f"[Unhandled Error] {e}")
         print("⏰ Cycle complete, sleeping 60 seconds...")
         time.sleep(30)
+
 
 
 
