@@ -34,12 +34,10 @@ FRESH_SIGNAL_MAX_AGE_CANDLES = 1
 FRESH_SIGNAL_MAX_PRICE_DEVIATION = 0.006
 
 # Read API credentials from environment variables (safer)
-API_KEY = os.getenv('BINGX_API_KEY', '')
-API_SECRET = os.getenv('BINGX_API_SECRET', '')
 
 exchange = ccxt.bingx({
-    'apiKey': API_KEY,
-    'secret': API_SECRET,
+    'apiKey': 'wGY6iowJ9qdr1idLbKOj81EGhhZe5O8dqqZlyBiSjiEZnuZUDULsAW30m4eFaZOu35n5zQktN7a01wKoeSg',
+    'secret': 'tqxcIVDdDJm2GWjinyBJH4EbvJrjIuOVyi7mnKOzhXHquFPNcULqMAOvmSy0pyuoPOAyCzE2zudzEmlwnA',
     'enableRateLimit': True,
     'options': {
         'defaultType': 'swap',
@@ -344,3 +342,4 @@ if __name__ == '__main__':
                 print(f"[Unhandled Error] {e}")
         print("⏰ Cycle complete, sleeping 60 seconds...")
         time.sleep(30)
+
